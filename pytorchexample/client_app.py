@@ -11,6 +11,7 @@ from pytorchexample.task import train as train_fn
 # Flower ClientApp
 app = ClientApp()
 
+IID = True
 
 @app.train()
 def train(msg: Message, context: Context):
@@ -26,15 +27,16 @@ def train(msg: Message, context: Context):
     partition_id = context.node_config["partition-id"]
     num_partitions = context.node_config["num-partitions"]
     batch_size = context.run_config["batch-size"]
-    trainloader, _ = load_data(partition_id, num_partitions, batch_size)
+    trainloader, _ = load_data(partition_id, num_partitions, batch_size, non_iid=IID)
 
     # Call the training function
 
-    malicious_clients = [2, 5]  # Example: clients 2 and 5 are malicious
+    # malicious_clients = [2]  # Example: clients 2 and 5 are malicious
+    malicious_clients = [2, 4]  # Example: clients 2 and 5 are malicious
     is_malicious = partition_id in malicious_clients
 
     if is_malicious:
-        #print(f"⚠️ Client {partition_id} acting maliciously!")
+        print(f"⚠️ Client {partition_id} acting maliciously!")
         train_loss = train_fn(
         model,
         trainloader,
@@ -79,7 +81,7 @@ def evaluate(msg: Message, context: Context):
     partition_id = context.node_config["partition-id"]
     num_partitions = context.node_config["num-partitions"]
     batch_size = context.run_config["batch-size"]
-    _, valloader = load_data(partition_id, num_partitions, batch_size)
+    _, valloader = load_data(partition_id, num_partitions, batch_size, non_iid=IID)
 
     # Call the evaluation function
     eval_loss, eval_acc, kappa, f1, roc= test_fn(

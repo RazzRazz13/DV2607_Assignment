@@ -10,6 +10,11 @@ import numpy as np
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, Normalize, ToTensor
 from sklearn.metrics import cohen_kappa_score, f1_score, accuracy_score, roc_auc_score
+from flwr_datasets.partitioner import (
+    IidPartitioner,
+    ShardPartitioner,        # non-IID example
+    DirichletPartitioner       # non-IID example
+)
 
 
 class Net(nn.Module):
@@ -44,25 +49,42 @@ def apply_transforms(batch):
     return batch
 
 
-def load_data(partition_id: int, num_partitions: int, batch_size: int):
-    """Load partition CIFAR10 data."""
-    # Only initialize `FederatedDataset` once
+def load_data(partition_id: int, num_partitions: int, batch_size: int, non_iid=False):
+    """Load partition CIFAR10 data with IID or non-IID option."""
     global fds
     if fds is None:
-        partitioner = IidPartitioner(num_partitions=num_partitions)
+
+        if non_iid:
+            # Example non-IID choice: label distribution imbalance
+            partitioner = DirichletPartitioner(
+                num_partitions=num_partitions,
+                alpha=0.3,      # lower alpha = more skewed
+                partition_by="label"
+            )
+        else:
+            # IID scenario
+            partitioner = IidPartitioner(num_partitions=num_partitions)
+
         fds = FederatedDataset(
             dataset="uoft-cs/cifar10",
             partitioners={"train": partitioner},
         )
+
+    # Load partition
     partition = fds.load_partition(partition_id)
-    # Divide data on each node: 80% train, 20% test
+
+    # Split each client's data 80/20
     partition_train_test = partition.train_test_split(test_size=0.2, seed=42)
-    # Construct dataloaders
+
+    # Transformations
     partition_train_test = partition_train_test.with_transform(apply_transforms)
+
     trainloader = DataLoader(
         partition_train_test["train"], batch_size=batch_size, shuffle=True
     )
-    testloader = DataLoader(partition_train_test["test"], batch_size=batch_size)
+    testloader = DataLoader(
+        partition_train_test["test"], batch_size=batch_size
+    )
     return trainloader, testloader
 
 
