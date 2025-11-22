@@ -12,8 +12,8 @@ from torchvision.transforms import Compose, Normalize, ToTensor
 from sklearn.metrics import cohen_kappa_score, f1_score, accuracy_score, roc_auc_score
 from flwr_datasets.partitioner import (
     IidPartitioner,
-    ShardPartitioner,        # non-IID example
-    DirichletPartitioner       # non-IID example
+    ShardPartitioner,
+    DirichletPartitioner
 )
 
 
@@ -55,14 +55,12 @@ def load_data(partition_id: int, num_partitions: int, batch_size: int, non_iid=F
     if fds is None:
 
         if non_iid:
-            # Example non-IID choice: label distribution imbalance
             partitioner = DirichletPartitioner(
                 num_partitions=num_partitions,
-                alpha=0.3,      # lower alpha = more skewed
+                alpha=0.3,
                 partition_by="label"
             )
         else:
-            # IID scenario
             partitioner = IidPartitioner(num_partitions=num_partitions)
 
         fds = FederatedDataset(
@@ -107,27 +105,15 @@ def train(net, trainloader, epochs, lr, device, malicious = False):
         for batch in trainloader:
             images = batch["img"].to(device)
             labels = batch["label"].to(device)
-
-            # ✅ Ensure labels are of correct type
-            if labels.dtype not in (torch.int64, torch.long):
-                labels = labels.long()
-
-            # ⚠️ Controlled malicious behavior
-            if malicious:
-                # Option A: flip a small portion of labels only
-                flip_mask = torch.rand_like(labels.float()) < 0.2  # flip 20%
-                labels = torch.where(flip_mask, (labels + 1) % 10, labels)
-            
             optimizer.zero_grad()
             loss = criterion(net(images), labels)
             loss.backward()
 
             if malicious:
-                # Option B: small gradient noise instead of huge perturbations
                 with torch.no_grad():
                     for param in net.parameters():
                         if param.grad is not None:
-                            param.grad.add_(torch.randn_like(param.grad) * 0.01)
+                            param.grad.add_(torch.randn_like(param.grad) * 0.2)
 
             optimizer.step()
             running_loss += loss.item()
